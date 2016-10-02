@@ -60,13 +60,13 @@ class BaseField():
         self.multi_valued = multi_valued
 
     def __repr__(self):
-        return "<{.__class__}:{.field_name}>".format(self)
+        return "<{0.__class__.__name__}:{0.field_name}>".format(self)
 
     # Model data-access descriptor behavior.
-    def __get__(self, instance):
+    def __get__(self, instance, owner_cls):
         if instance is None:  # Access to unbound object
             return self
-        return instance._cache[self.field_name]
+        return instance._cache.get(self.field_name, self.default)
 
     def __set__(self, instance, value):
         instance._cache[self.field_name] = value

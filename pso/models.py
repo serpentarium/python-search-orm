@@ -24,7 +24,12 @@ class BaseModel(metaclass=ModelMetaClass):
     """Base class for EngineSpecific models"""
     _fields = []
     _stored_fields = []
-    _cache = None
+    _cache = {}
+
+    def __init__(self, **kwargs):
+        for key, arg in kwargs.items():
+            if key in self._fields:
+                setattr(self, key, arg)
 
     def get_queryset():
         raise NotImplementedError("Please define get_queryset in Driver!")
@@ -32,6 +37,9 @@ class BaseModel(metaclass=ModelMetaClass):
     def __iter__(self):
         """Only filed with data to emulate dict behavior"""
         return self._stored_fields
+
+    def __repr__(self):
+        return "<Model: {0.__class__.__name__}>".format(self)
 
     def __getitem__(self, key):
         return _cache[key]
