@@ -13,9 +13,9 @@ class ModelMetaClass(type):
             if isinstance(attr, BaseField):
                 if not attr.field_name:
                     attr.field_name = name
-                cls._fields.append(attr.field_name)
+                cls._fields.append(name)
                 if attr.store:
-                    cls._stored_fields.append(attr.field_name)
+                    cls._stored_fields.append(name)
 
 
 
@@ -33,6 +33,10 @@ class BaseModel(metaclass=ModelMetaClass):
 
     def get_queryset():
         raise NotImplementedError("Please define get_queryset in Driver!")
+
+    @classmethod
+    def get_fields(cls):
+        return (getattr(cls, name) for name in cls._fields)
 
     def __iter__(self):
         """Only filed with data to emulate dict behavior"""

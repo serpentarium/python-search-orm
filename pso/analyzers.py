@@ -21,8 +21,8 @@ class AbstractAnalyzer(metaclass=abc.ABCMeta):
 class Analyzer(AbstractAnalyzer):
     name = ''
 
-    def __init__(self, tokenizer, *filters, **settings):
-        self.settings = settings
+    def __init__(self, tokenizer, *filters, **config):
+        self.config = config
         self._tokenizer = tokenizer
         self._filters = filters
 

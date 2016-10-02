@@ -11,7 +11,7 @@ class FieldMeta(type):
 class FieldType():
     """Field type creation shortcut"""
     name = ''  # Shoud be unique
-    _analyzers = None
+    _analyzers = []
     config = {}
 
     def __init__(self, name, *analyzers, **settings):
@@ -21,8 +21,9 @@ class FieldType():
         self._settings = settings
 
     def __repr__(self):
-        return "<FieldType: {index!r}|{query!r}>".format(
-            query=self._query_analyzer, index=self._index_analyzer)
+        return "<{cls}: {name}: {analyzers}>".format(
+            analyzers=' | '.join("{!r}".format(a) for a in self._analyzers),
+            cls=self.__class__.__name__, name=self.name)
 
     def __str__(self):
         return str(self.name)
@@ -47,6 +48,7 @@ class BaseField():
     _default = None
     store = False
     boost = 1
+    index = True
     operations = ()
     multi_valued = False  # E.G. list
 
@@ -70,6 +72,10 @@ class BaseField():
 
     def __set__(self, instance, value):
         instance._cache[self.field_name] = value
+
+    @property
+    def is_predefined(self):
+        return isinstance(self.field_type, str)
 
     def to_index(self, value):
         """Prepare python value before send"""
