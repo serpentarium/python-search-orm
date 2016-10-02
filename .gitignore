@@ -87,3 +87,11 @@ ENV/
 
 # Rope project settings
 .ropeproject
+
+# IDE
+*.sublime-*
+
+# Relative projects
+pso-solr/*
+pso-elasticsearch/*
+pso-flask/*
