@@ -2,6 +2,7 @@
 PSO fields magic.
 """
 from pso.analyzers import AbstractAnalyzer
+from pso.q import Q, QComparisonMixin
 
 
 class FieldMeta(type):
@@ -39,8 +40,13 @@ class FieldType():
         return self._analyzers
 
 
-class BaseField():
-    """Base class for each field"""
+class BaseField(QComparisonMixin):
+    """
+    Base class for each field
+    """
+    # TODO: overload equality operators
+    #       to return proper Q object instance.
+    #       To make filter condition directly on fields
 
     field_type = None  # <FieldType> for EngineSpecific/UserDefined
     is_pk = False  # Is used to set UniqueId. Used when update index
@@ -88,3 +94,6 @@ class BaseField():
     @property
     def default(self):
         return self._default() if callable(self._default) else self._default
+
+    def _make_q_operation(self, operation, value):
+        return Q(_field=self.field_name, _operation=operation, _value=value)

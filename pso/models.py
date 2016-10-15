@@ -18,8 +18,6 @@ class ModelMetaClass(type):
                     cls._stored_fields.append(name)
 
 
-
-
 class BaseModel(metaclass=ModelMetaClass):
     """Base class for EngineSpecific models"""
     _fields = []
@@ -46,6 +44,6 @@ class BaseModel(metaclass=ModelMetaClass):
         return "<Model: {0.__class__.__name__}>".format(self)
 
     def __getitem__(self, key):
-        return _cache[key]
+        return self._cache[key]
 
     # def get_object
