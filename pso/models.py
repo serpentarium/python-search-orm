@@ -2,13 +2,17 @@
 Models meta magic here
 """
 from pso.fields import BaseField
+from pso.query import BaseQuerySet
+
 
 class ModelMetaClass(type):
     """
     Magic with fields
     """
     def __init__(cls, name, bases, attr_dict):
-        super().__init__(name, bases, attr_dict)
+        attr_dict.setdefault('_fields', [])
+        attr_dict.setdefault('_stored_fields', [])
+
         for name, attr in attr_dict.items():
             if isinstance(attr, BaseField):
                 if not attr.field_name:
@@ -16,6 +20,11 @@ class ModelMetaClass(type):
                 cls._fields.append(name)
                 if attr.store:
                     cls._stored_fields.append(name)
+
+        # Bind QuerySet  # TODO check this
+        qs_class = attr_dict.get('queryset_class', BaseQuerySet)
+        setattr(cls, 'objects', qs_class(cls))
+        super(ModelMetaClass, cls).__init__(name, bases, attr_dict)
 
 
 class BaseModel(metaclass=ModelMetaClass):
@@ -28,9 +37,6 @@ class BaseModel(metaclass=ModelMetaClass):
         for key, arg in kwargs.items():
             if key in self._fields:
                 setattr(self, key, arg)
-
-    def get_queryset():
-        raise NotImplementedError("Please define get_queryset in Driver!")
 
     @classmethod
     def get_fields(cls):

@@ -133,9 +133,9 @@ class BaseQ(QComparisonMixin):
             return cls(_operator, _childs=tuple(childs))
 
     def __repr__(self):
-        is_not = 'NOT' if self._inverted else ''
+        is_not = ' NOT' if self._inverted else ''
         if self.qtype == Q.CONDITION:
-            template = "<Q {0._field!s} {is_not} {0._operation!s} {0._value!r}>"  # noqa
+            template = "<Q {0._field!s}{is_not} {0._operation!s} {0._value!r}>"  # noqa
         else:
             template = "<Q {0._operator!s} {is_not} {0._childs!r}>"  # R
         return template.format(self, is_not=is_not)
@@ -156,7 +156,7 @@ class BaseQ(QComparisonMixin):
         kwargs['_inverted'] = not kwargs['_inverted']
         return Q(**kwargs)
 
-    def __and_or(self, other, operator='AND'):
+    def _merge_condirion(self, other, operator='AND'):
         if not isinstance(other, Q):
             return NotImplemented
 
@@ -177,11 +177,10 @@ class BaseQ(QComparisonMixin):
         return Q(operator, _childs=tuple(childs))
 
     def __and__(self, other):
-        return self.__and_or(other, 'AND')
+        return self._merge_condirion(other, 'AND')
 
     def __or__(self, other):
-        return self.__and_or(other, 'OR')
-
+        return self._merge_condirion(other, 'OR')
 
 
 class Q(BaseQ, QComparisonMixin):
