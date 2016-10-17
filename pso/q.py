@@ -83,7 +83,7 @@ class BaseQ(QComparisonMixin):
     @property
     def field(self):
         if self.qtype == self.AGGREGATION:
-            reduce(_is_onefield, self._childs)
+            return reduce(_is_onefield, self._childs)
         else:
             return self._field
 
