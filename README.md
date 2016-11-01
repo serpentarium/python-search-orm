@@ -6,13 +6,20 @@ This package should/will contain only abstract logic that allows to build workin
 
 ----------
 ### TODO ###
- - `QuerySet` definition;
- - `ResultSet` definition;
- - `Tree.node` for search condition tree;
- - Common fields operations mixins. For  `QuerySet` and `Q` objects (`fulltext`, `numeric`, `datetime`, `geo`...);
- - Registering operations for fields;
- - `Q` objects with overloaded all operators, we need. ( `>=`, `in`, `!=`, etc...);
- - ...
+ - [x] `QuerySet` definition;
+ - [x] `Q` objects with overloaded all operators, we need. ( `>=`, `in`, `!=`, etc...);
+ - [x] Make some model fields magic, to generate `Q` from them.
+ - [x] Auto-unpack iterbles `*Article.tags << ['tag1', 'tag2', 'tag3']` - tag1 in tags or tag2 in tags...
+ - [x] Replace Q.__contains__ with something working. `<<` and reversed `>>`
+ - [ ] `ResultSet` definition;
+ - [ ] Common fields operations mixins. For  `QuerySet` and `Q` objects (`fulltext`, `numeric`, `datetime`, `geo`...);
+ - [ ] Registering operations for fields;
+ - [ ] Multi-model search. Within one schema/core.
+ - [ ] Clean code.
+ - [ ] Make setup.py.
+ - [ ] Make docs.
+ - [ ] ...
+ - [ ] Finish TODO section
 
 ###Contributing###
 Feel free to add commit, issue, todo item etc...
