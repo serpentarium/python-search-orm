@@ -5,18 +5,20 @@ from pso.q import Q
 # from copy import copy
 from pso.utils import copy_self
 
+
 class BaseQuerySet():
     """
     Base queryset class. You shoud be itheritent from it.
     """
 
-    __slots__ = ('_offset', '_limit', '_query', '_model')
+    __slots__ = ('_offset', '_limit', '_query', '_model', '_prefetch')
 
     def __init__(self, model=None):
         self._offset = 0
         self._limit = None
         self._query = None
         self._model = model
+        self._prefetch = False
 
     def __repr__(self):
         return "<{model_name} QuerySet: {qs_repr} | {limit}{offset}>".format(
@@ -47,6 +49,10 @@ class BaseQuerySet():
 
     def __call__(self, *args, **kwargs):
         return self.filter(*args, **kwargs)
+
+    @copy_self
+    def prefetch(self):
+        self._prefetch = True
 
     @copy_self
     def _slice(new_qs, offset=None, limit=None):

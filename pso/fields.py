@@ -2,7 +2,7 @@
 PSO fields magic.
 """
 from pso.analyzers import AbstractAnalyzer
-from pso.q import Q, QComparisonMixin
+from pso.q import Q, QComparisonMixin, QShiftContainsMixin
 
 
 class FieldMeta(type):
@@ -40,7 +40,7 @@ class FieldType():
         return self._analyzers
 
 
-class BaseField(QComparisonMixin):
+class BaseField(QComparisonMixin, QShiftContainsMixin):
     """
     Base class for each field
     """

@@ -13,26 +13,60 @@ Article.filter(published)
 Article.filter(Article.user_id == Article.edited_by)
 """
 from functools import reduce
+from functools import wraps
+from collections.abc import Iterable
+
+
+def unpack_magic(method):
+    """
+    Method decorator used to unpack Iterable items,
+    create and return multiple same Q objects for each value
+
+    E.G:
+    Recipe.filter(*Recipe.category == ['cat1', 'cat2', 'cat3'])
+    """
+    @wraps(method)
+    def unpack(self, value):
+        # String is value by itself, skip unpack.
+        if isinstance(value, Iterable) and not isinstance(value, str):
+            # unpack lists here
+            return tuple(method(self, item) for item in value)
+        else:
+            return method(self, value)
+    return unpack
+
+
+
+class NoValue:
+    """
+    To check when value is explicitly None or False
+    """
 
 
 class QComparisonMixin():
     """QComparisonMixin - defines comparsion magic for Q objects"""
 
+    @unpack_magic
     def __lt__(self, value):
         return self._make_q_operation('lt', value)
 
+    @unpack_magic
     def __le__(self, value):
         return self._make_q_operation('le', value)
 
+    @unpack_magic
     def __eq__(self, value):
         return self._make_q_operation('eq', value)
 
+    @unpack_magic
     def __ne__(self, value):
         return self._make_q_operation('ne', value)
 
+    @unpack_magic
     def __gt__(self, value):
         return self._make_q_operation('gt', value)
 
+    @unpack_magic
     def __ge__(self, value):
         return self._make_q_operation('ge', value)
 
@@ -48,6 +82,24 @@ class QComparisonMixin():
         __contains__ shoud return boolean value
         """
         return self._make_q_operation('in', value)
+
+
+class QShiftContainsMixin:
+    """Used to search by IN
+    Like:
+    Q('category') >> ['commedy', 'dramma', 'western']
+    Q('tags') << 'sometag'
+    """
+
+    def __rshift__(self, value):
+        return self._make_q_operation('in', value)
+
+    __rlshift__ = __rshift__
+
+    def __lshift__(self, value):
+        return self._make_q_operation('in', value)
+
+    __rrshift__ = __lshift__
 
 
 def _is_onefield(q1, q2):
@@ -117,7 +169,7 @@ class BaseQ(QComparisonMixin):
                 if all(isinstance(arg, cls) for arg in args):
                     childs = args
                 else:
-                    raise ValueError("Err")
+                    raise ValueError("Can not agregate non-Q values")
 
             # Kwargs multiquery
             for key, value in kwargs.items():  # R
@@ -183,7 +235,7 @@ class BaseQ(QComparisonMixin):
         return self._merge_condirion(other, 'OR')
 
 
-class Q(BaseQ, QComparisonMixin):
+class Q(BaseQ, QComparisonMixin, QShiftContainsMixin):
 
     def _make_q_operation(self, operation, value):
         if self.is_leaf:

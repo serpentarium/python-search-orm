@@ -9,9 +9,11 @@ class ModelMetaClass(type):
     """
     Magic with fields
     """
-    def __init__(cls, name, bases, attr_dict):
-        attr_dict.setdefault('_fields', [])
-        attr_dict.setdefault('_stored_fields', [])
+    def __new__(meta, name, bases, attr_dict):
+        attr_dict['_fields'] = []
+        attr_dict['_stored_fields'] = []
+        queryset_class = attr_dict.pop('__queryset_class__', BaseQuerySet)
+        cls = super().__new__(meta, name, bases, attr_dict)
 
         for name, attr in attr_dict.items():
             if isinstance(attr, BaseField):
@@ -22,9 +24,8 @@ class ModelMetaClass(type):
                     cls._stored_fields.append(name)
 
         # Bind QuerySet  # TODO check this
-        qs_class = attr_dict.get('queryset_class', BaseQuerySet)
-        setattr(cls, 'objects', qs_class(cls))
-        super(ModelMetaClass, cls).__init__(name, bases, attr_dict)
+        setattr(cls, 'objects', queryset_class(cls))
+        return cls
 
 
 class BaseModel(metaclass=ModelMetaClass):
