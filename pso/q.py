@@ -109,11 +109,12 @@ def _is_onefield(q1, q2):
         return q1.field if q1 else False
 
 
-class BaseQ(QComparisonMixin):
+class BaseQ:
     """Immutable query object"""
 
     CONDITION = 'CONDITION'
     AGGREGATION = 'AGGREGATION'
+    FIELD = 'FIELD'
 
     DEFAULT_OPERATOR = 'AND'
 
@@ -126,7 +127,12 @@ class BaseQ(QComparisonMixin):
 
     @property
     def qtype(self):
-        return self.AGGREGATION if len(self._childs) else self.CONDITION
+        if len(self._childs):
+            return self.AGGREGATION
+        elif self._value != NoValue:
+            return self.CONDITION
+        else:
+            return self.FIELD
 
     @property
     def inverted(self):
@@ -139,7 +145,7 @@ class BaseQ(QComparisonMixin):
         else:
             return self._field
 
-    def __new__(cls, *args, _field=None, _operation=None, _value=None,
+    def __new__(cls, *args, _field=None, _operation=None, _value=NoValue,
                 _childs=(), _inverted=False, _operator=DEFAULT_OPERATOR,
                 **kwargs):
         args = list(args)
@@ -271,7 +277,7 @@ class MutableQ():
     def _reset(self):
         self._field = None
         self._operation = None
-        self._value = None
+        self._value = NoValue
         self._operator = self.DEFAULT_OPERATOR
         self._inverted = False
         self._childs = []

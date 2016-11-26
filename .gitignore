@@ -92,6 +92,7 @@ ENV/
 *.sublime-*
 
 # Relative projects
-pso-solr/*
-pso-elasticsearch/*
-pso-flask/*
+pso_solr/*
+pso_elasticsearch/*
+pso_flask/*
+pso_sample/*
