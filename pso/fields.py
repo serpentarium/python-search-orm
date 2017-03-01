@@ -10,6 +10,7 @@ class FieldMeta(type):
 
 
 class FieldType():
+    # integer, long, float, double, date
     """Field type creation shortcut"""
     name = ''  # Shoud be unique
     _analyzers = []
@@ -24,6 +25,7 @@ class FieldType():
         for analyzer in analyzers:
             self.add_analyzer(analyzer)
         self._settings = settings
+        self._settings.setdefault('class', name)
 
     def __repr__(self):
         return "<{cls}: {name}: {analyzers}>".format(

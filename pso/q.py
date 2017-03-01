@@ -36,7 +36,6 @@ def unpack_magic(method):
     return unpack
 
 
-
 class NoValue:
     """
     To check when value is explicitly None or False
@@ -102,6 +101,18 @@ class QShiftContainsMixin:
     __rrshift__ = __lshift__
 
 
+class QNumericBoostMixin:
+    """
+    Used to boost fields by multiplying them.
+    Q('OR', qs * 2, tags / 4
+    """
+    #  TODO: Immutable. Return new object
+
+    def __mul__(self, value):
+        self._boost *= value
+        return self
+
+
 def _is_onefield(q1, q2):
     if q2:
         return q1.field if q1.field == q2.field else False
@@ -119,7 +130,7 @@ class BaseQ:
     DEFAULT_OPERATOR = 'AND'
 
     __slots__ = ('_field', '_operation', '_value', '_operator',
-                 '_inverted', '_childs')
+                 '_inverted', '_childs', '_boost')
 
     @property
     def is_leaf(self):
@@ -147,7 +158,7 @@ class BaseQ:
 
     def __new__(cls, *args, _field=None, _operation=None, _value=NoValue,
                 _childs=(), _inverted=False, _operator=DEFAULT_OPERATOR,
-                **kwargs):
+                _boost=1, **kwargs):
         args = list(args)
         if len(args) and isinstance(args[0], str):
             if args[0] in ['AND', 'OR']:
@@ -164,6 +175,7 @@ class BaseQ:
             self._childs = tuple(_childs)
             self._inverted = _inverted
             self._operator = _operator
+            self._boost = _boost
             return self
 
         # magic
@@ -193,9 +205,9 @@ class BaseQ:
     def __repr__(self):
         is_not = ' NOT' if self._inverted else ''
         if self.qtype == Q.CONDITION:
-            template = "<Q {0._field!s}{is_not} {0._operation!s} {0._value!r}>"  # noqa
+            template = "<Q^{0._boost!s} {0._field!s}{is_not} {0._operation!s} {0._value!r}>"  # noqa
         else:
-            template = "<Q {0._operator!s} {is_not} {0._childs!r}>"  # R
+            template = "<Q^{0._boost!s}  {0._operator!s} {is_not} {0._childs!r}>"  # R
         return template.format(self, is_not=is_not)
 
     def _serialize_as_dict(self):
@@ -206,6 +218,7 @@ class BaseQ:
             '_operator': self._operator,
             '_inverted': self._inverted,
             '_childs': self._childs,
+            '_boost': self._boost,
         }
 
     # Logical tree
@@ -241,7 +254,7 @@ class BaseQ:
         return self._merge_condirion(other, 'OR')
 
 
-class Q(BaseQ, QComparisonMixin, QShiftContainsMixin):
+class Q(BaseQ, QComparisonMixin, QShiftContainsMixin, QNumericBoostMixin):
 
     def _make_q_operation(self, operation, value):
         if self.is_leaf:
