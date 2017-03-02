@@ -25,7 +25,6 @@ class ModelMetaClass(type):
                 attr = attr[0]
                 attr_dict[name] = attr  # replace attr in object
                 attr.multi_valued = True
-                print('DEBUG', name, attr)
 
             if isinstance(attr, BaseField):
 
@@ -63,7 +62,8 @@ class BaseModel(metaclass=ModelMetaClass):
 
     def __iter__(self):
         """Only filed with data to emulate dict behavior"""
-        return self._stored_fields
+        for name in self._fields:
+            yield name, self[name]
 
     def __repr__(self):
         return "<Model: {0.__class__.__name__}>".format(self)
@@ -71,4 +71,16 @@ class BaseModel(metaclass=ModelMetaClass):
     def __getitem__(self, key):
         return self._cache[key]
 
-    # def get_object
+    def to_index(self):
+        # return self._cache
+        arr = {}
+        for name in self._fields:
+            field = getattr(self.__class__, name)
+            if name == '_version_':
+                continue
+            if field.multi_valued:
+                arr[name] = [field.to_index(val) for val in self._cache.get(name, [])]
+            else:
+                arr[name] = field.to_index(self._cache.get(name))
+            return arr
+      # def get_object

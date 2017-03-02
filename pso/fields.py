@@ -98,7 +98,7 @@ class BaseField(QComparisonMixin, QShiftContainsMixin):
         """Prepare python value before send"""
         return value or self.default
 
-    def to_python(value):
+    def to_python(self, value):
         """Convert redurned data to Python native obect"""
         return value
 
