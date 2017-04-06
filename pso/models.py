@@ -34,8 +34,9 @@ class ModelMetaClass(type):
                 if attr.store:
                     stored_fields.append(name)
 
-            attr_dict['_fields'] = fields
-            attr_dict['_stored_fields'] = stored_fields
+        attr_dict['_fields'] = fields
+        attr_dict['_stored_fields'] = stored_fields
+        attr_dict['_cache'] = {}
 
         cls = super().__new__(meta, name, bases, attr_dict)
 
@@ -46,14 +47,12 @@ class ModelMetaClass(type):
 
 class BaseModel(metaclass=ModelMetaClass):
     """Base class for EngineSpecific models"""
-    _fields = []
-    _stored_fields = []
-    _cache = {}
 
     def __init__(self, **kwargs):
+        self._cache = {}
         for key, arg in kwargs.items():
             if key in self._fields:
-                setattr(self, key, arg)
+                self._cache[key] = arg
 
     @classmethod
     def get_fields(cls):
@@ -82,5 +81,5 @@ class BaseModel(metaclass=ModelMetaClass):
                 arr[name] = [field.to_index(val) for val in self._cache.get(name, [])]
             else:
                 arr[name] = field.to_index(self._cache.get(name))
-            return arr
+        return arr
       # def get_object
