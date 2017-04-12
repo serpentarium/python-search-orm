@@ -15,7 +15,24 @@ Article.filter(Article.user_id == Article.edited_by)
 from functools import reduce
 from functools import wraps
 from collections.abc import Iterable
+from collections import namedtuple
 
+class Operator:
+    """Constants to define join operators."""
+    AND = 'AND'
+    OR = 'OR' 
+    XOR = 'XOR'
+
+
+class Condition:
+    """Constants to define condition operators"""
+    LT = 'lt'
+    LE = 'le'
+    EQ = 'eq'
+    NE = 'ne'
+    GT = 'gt'
+    GE = 'ge'
+    IN = 'in'
 
 def unpack_magic(method):
     """
@@ -47,27 +64,27 @@ class QComparisonMixin():
 
     @unpack_magic
     def __lt__(self, value):
-        return self._make_q_operation('lt', value)
+        return self._make_q_operation(Condition.LT, value)
 
     @unpack_magic
     def __le__(self, value):
-        return self._make_q_operation('le', value)
+        return self._make_q_operation(Condition.LE, value)
 
     @unpack_magic
     def __eq__(self, value):
-        return self._make_q_operation('eq', value)
+        return self._make_q_operation(Condition.EQ, value)
 
     @unpack_magic
     def __ne__(self, value):
-        return self._make_q_operation('ne', value)
+        return self._make_q_operation(Condition.NE, value)
 
     @unpack_magic
     def __gt__(self, value):
-        return self._make_q_operation('gt', value)
+        return self._make_q_operation(Condition.GT, value)
 
     @unpack_magic
     def __ge__(self, value):
-        return self._make_q_operation('ge', value)
+        return self._make_q_operation(Condition.GE, value)
 
     def __contains__(self, value):
         """To use reverse in operator as contains operation
@@ -80,7 +97,7 @@ class QComparisonMixin():
         Because there is no reverse __contains__ method or fallback.
         __contains__ shoud return boolean value
         """
-        return self._make_q_operation('in', value)
+        return self._make_q_operation(Condition.IN, value)
 
 
 class QShiftContainsMixin:
@@ -91,12 +108,12 @@ class QShiftContainsMixin:
     """
 
     def __rshift__(self, value):
-        return self._make_q_operation('in', value)
+        return self._make_q_operation(Condition.IN, value)
 
     __rlshift__ = __rshift__
 
     def __lshift__(self, value):
-        return self._make_q_operation('in', value)
+        return self._make_q_operation(Condition.IN, value)
 
     __rrshift__ = __lshift__
 
@@ -120,17 +137,17 @@ def _is_onefield(q1, q2):
         return q1.field if q1 else False
 
 
-class BaseQ:
+QTuple = namedtuple('BaseBaseQ',
+                    ['_field', '_operation', '_value', '_operator', 'inverted', '_childs', '_boost'])
+
+class BaseQ(QTuple):
     """Immutable query object"""
 
     CONDITION = 'CONDITION'
     AGGREGATION = 'AGGREGATION'
     FIELD = 'FIELD'
 
-    DEFAULT_OPERATOR = 'AND'
-
-    __slots__ = ('_field', '_operation', '_value', '_operator',
-                 '_inverted', '_childs', '_boost')
+    DEFAULT_OPERATOR = Operator.AND
 
     @property
     def is_leaf(self):
@@ -146,16 +163,13 @@ class BaseQ:
             return self.FIELD
 
     @property
-    def inverted(self):
-        return self._inverted
-
-    @property
-    def field(self):
+    def is_field(self):
         if self.qtype == self.AGGREGATION:
             return reduce(_is_onefield, self._childs)
         else:
             return self._field
 
+    # TODO work with namedtuple
     def __new__(cls, *args, _field=None, _operation=None, _value=NoValue,
                 _childs=(), _inverted=False, _operator=DEFAULT_OPERATOR,
                 _boost=1, **kwargs):
@@ -167,16 +181,9 @@ class BaseQ:
                 _field = args.pop(0)
 
         # simple constructor
-        if _field or _childs:
-            self = super().__new__(cls)
-            self._field = _field
-            self._operation = _operation
-            self._value = _value
-            self._childs = tuple(_childs)
-            self._inverted = _inverted
-            self._operator = _operator
-            self._boost = _boost
-            return self
+        if _field or _childs: 
+            _childs = tuple(_childs)
+            return super().__new__(cls, (_field, _operation, _value, _operator, _inverted, _childs, _boost))
 
         # magic
         else:
@@ -211,23 +218,14 @@ class BaseQ:
         return template.format(self, is_not=is_not)
 
     def _serialize_as_dict(self):
-        return {
-            '_field': self._field,
-            '_operation': self._operation,
-            '_value': self._value,
-            '_operator': self._operator,
-            '_inverted': self._inverted,
-            '_childs': self._childs,
-            '_boost': self._boost,
-        }
+        return {k: getattr(self, k) for k in self.__slots__}
 
     # Logical tree
     def __invert__(self):
-        kwargs = self._serialize_as_dict()
-        kwargs['_inverted'] = not kwargs['_inverted']
-        return Q(**kwargs)
+        self._inverted = not self._inverted 
+        return self
 
-    def _merge_condirion(self, other, operator='AND'):
+    def _merge_condition(self, other, operator=Operator.AND)
         if not isinstance(other, Q):
             return NotImplemented
 
@@ -248,14 +246,15 @@ class BaseQ:
         return Q(operator, _childs=tuple(childs))
 
     def __and__(self, other):
-        return self._merge_condirion(other, 'AND')
+        return self._merge_condition(other, Operator.AND)
 
     def __or__(self, other):
-        return self._merge_condirion(other, 'OR')
+        return self._merge_condition(other, Operator.OR)
 
 
 class Q(BaseQ, QComparisonMixin, QShiftContainsMixin, QNumericBoostMixin):
-
+    
+    # TODO: rewrite to use namedtuple
     def _make_q_operation(self, operation, value):
         if self.is_leaf:
             q = Q(_field=self._field, _operation=operation, _value=value)
@@ -266,14 +265,12 @@ class Q(BaseQ, QComparisonMixin, QShiftContainsMixin, QNumericBoostMixin):
             q = Q(_field=self._field, _operation=operation, _value=value)
             pass
             # TODO: maybe check all childs _field ... and in some case append
+        elif self.is_field:
+            q = Q(_field=self._field, _operation=operation, _value=value)
+            return Q(_childs=self._childs + (q))
         else:
-            field = self.field
-            if field:
-                q = Q(_field=self._field, _operation=operation, _value=value)
-                return Q(_childs=self._childs + (q))
-            else:
-                raise ValueError(
-                    'Can not use comparsion of complex Q with multuple fields')
+            raise ValueError(
+                'Can not use comparsion of complex Q with multuple fields')
 
 
 class MutableQ():
@@ -286,14 +283,6 @@ class MutableQ():
 
     Can be used with "with" statement.
     """
-
-    def _reset(self):
-        self._field = None
-        self._operation = None
-        self._value = NoValue
-        self._operator = self.DEFAULT_OPERATOR
-        self._inverted = False
-        self._childs = []
 
     def __copy__(self):
         return MutableQ(_field=self._field, _operation=self._operation,
@@ -312,8 +301,7 @@ class MutableQ():
             pass
             # TODO: maybe check all childs _field ... and in some case append
         else:
-            field = self.field
-            if field:
+            if self.is_field:
                 q = Q(_field=self._field, _operation=operation, _value=value)
                 return Q(_childs=self._childs + (q))
             else:
