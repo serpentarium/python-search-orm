@@ -107,4 +107,4 @@ class BaseField(QComparisonMixin, QShiftContainsMixin):
         return self._default() if callable(self._default) else self._default
 
     def _make_q_operation(self, operation, value):
-        return Q(_field=self.name, _operation=operation, _value=value)
+        return Q(field=self.name, operation=operation, value=value)
