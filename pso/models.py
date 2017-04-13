@@ -11,28 +11,37 @@ class ModelMetaClass(type):
     """
 
     def __new__(meta, name, bases, attr_dict):
+        # TODO rewrite queryset_class inheritance
         attr_dict['_fields'] = []
         attr_dict['_stored_fields'] = []
-        queryset_class = attr_dict.pop('__queryset_class__', BaseQuerySet)
+        queryset_class = attr_dict.get('__queryset_class__', )
+        for base in bases:
+            if issubclass(base, BaseModel):
+                # TODO inherit fields
+                if not queryset_class:
+                    queryset_class = base.__queryset_class__
+        if not queryset_class:
+            queryset_class = BaseQuerySet
+
         fields = []
         stored_fields = []
 
-        for name, attr in attr_dict.items():
-            if isinstance(attr, list) and len(attr) == 1 \
-               and isinstance(attr[0], BaseField):
+        for attr, val in attr_dict.items():
+            if isinstance(val, list) and len(val) == 1 \
+               and isinstance(val[0], BaseField):
                 # this allows to define models like
                 # tage = list(TextField())
-                attr = attr[0]
-                attr_dict[name] = attr  # replace attr in object
-                attr.multi_valued = True
+                val = val[0]
+                attr_dict[attr] = val  # replace attr in object
+                val.multi_valued = True
 
-            if isinstance(attr, BaseField):
+            if isinstance(val, BaseField):
 
-                if not attr.name:
-                    attr.name = name
-                fields.append(name)
-                if attr.store:
-                    stored_fields.append(name)
+                if not val.name:
+                    val.name = attr
+                fields.append(attr)
+                if val.store:
+                    stored_fields.append(attr)
 
         attr_dict['_fields'] = fields
         attr_dict['_stored_fields'] = stored_fields
@@ -78,8 +87,8 @@ class BaseModel(metaclass=ModelMetaClass):
             if name == '_version_':
                 continue
             if field.multi_valued:
-                arr[name] = [field.to_index(val) for val in self._cache.get(name, [])]
+                arr[name] = [field.to_index(val)
+                             for val in self._cache.get(name, [])]
             else:
                 arr[name] = field.to_index(self._cache.get(name))
         return arr
-      # def get_object

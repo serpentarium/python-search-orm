@@ -11,19 +11,20 @@ class BaseQuerySet():
     Base queryset class. You shoud be itheritent from it.
     """
 
-    __slots__ = ('_offset', '_limit', '_query', '_model', '_prefetch')
+    __slots__ = ('_offset', '_limit', '_filter', '_search', '_model', '_prefetch')
 
     def __init__(self, model=None):
         self._offset = 0
         self._limit = None
-        self._query = None
+        self._filter = None
+        self._search = None
         self._model = model
         self._prefetch = False
 
     def __repr__(self):
         return "<{model_name} QuerySet: {qs_repr} | {limit}{offset}>".format(
             model_name=self._model.__name__,
-            qs_repr=repr(self._query),
+            qs_repr=repr(self._filter),
             limit=" LIMIT {}".format(self._limit) if self._limit else '',
             offset=" OFFSET {}".format(self._offset) if self._offset else '',
         )
@@ -37,12 +38,23 @@ class BaseQuerySet():
     @copy_self
     def filter(new_qs, *args, **kwargs):
         """
-        Universal search by filtering. ...
+        Filter search subset
         """
-        if new_qs._query is None:
-            new_qs._query = Q(*args, **kwargs)
+        if new_qs._filter is None:
+            new_qs._filter = Q(*args, **kwargs)
         else:
-            new_qs._query = new_qs._query & Q(*args, **kwargs)
+            new_qs._filter = new_qs._filter & Q(*args, **kwargs)
+        return new_qs
+
+    @copy_self
+    def search(new_qs, *args, **kwargs):
+        """
+        Search count score.
+        """
+        if new_qs._search is None:
+            new_qs._search = Q(*args, **kwargs)
+        else:
+            new_qs._search = new_qs._search & Q(*args, **kwargs)
         return new_qs
 
         # Shoud correct work with Q(), ModelFields, and vanilla **kwargs
