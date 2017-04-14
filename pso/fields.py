@@ -108,3 +108,6 @@ class BaseField(QComparisonMixin, QShiftContainsMixin):
 
     def _make_q_operation(self, operation, value):
         return Q(field=self.name, operation=operation, value=value)
+
+    def __mul__(self, value):
+        return Q(field=self.name, boost=value)
