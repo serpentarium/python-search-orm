@@ -18,6 +18,35 @@ from collections.abc import Iterable
 from collections import namedtuple
 
 
+class Range(namedtuple('Range', ['fr', 'to', 'fr_incl', 'to_incl'])):
+
+    @classmethod
+    def from_dict(cls, d):
+        if Condition.GE in d:
+            fr, fr_incl = d[Condition.GE], True
+        else:
+            fr, fr_incl = d[Condition.GT], False
+
+        if Condition.LE in d:
+            to, to_incl = d[Condition.LE], True
+        else:
+            to, to_incl = d[Condition.LT], False
+        return cls(fr, to, fr_incl, to_incl)
+
+    def to_dict(self):
+        d = {}
+        d[Condition.GE if self.fr_incl else Condition.GT] = self.fr
+        d[Condition.LE if self.to_incl else Condition.LT] = self.to
+        return d
+
+    @classmethod
+    def from_range(cls, r):
+        """
+        Ability to use Python's standart range object
+        """
+        cls(r.start, r.end, True, False)
+
+
 class Operator:
     """Constants to define join operators."""
     AND = 'AND'
@@ -34,6 +63,15 @@ class Condition:
     GT = 'gt'
     GE = 'ge'
     IN = 'in'
+    RANGE = 'range'
+
+
+RANGE_CONDITIONS = [
+    Condition.LT,
+    Condition.LE,
+    Condition.GT,
+    Condition.GE,
+]
 
 
 def unpack_magic(method):
@@ -63,6 +101,48 @@ class NoValue:
 
 class QComparisonMixin():
     """QComparisonMixin - defines comparsion magic for Q objects"""
+
+    _CONFLICT_MERGE_MAP = {
+        (Condition.LT, Operator.AND): min,
+        (Condition.LE, Operator.AND): min,
+        (Condition.GT, Operator.AND): max,
+        (Condition.GE, Operator.AND): max,
+
+        (Condition.LT, Operator.OR): max,
+        (Condition.LE, Operator.OR): max,
+        (Condition.GT, Operator.OR): min,
+        (Condition.GE, Operator.OR): min,
+    }
+
+    def _merge_range_condition(self):
+        if self.is_leaf or not self.is_field:
+            return
+
+        qrange = {}
+        childs = []
+        # TODO boost check
+        for q in self.childs:
+            if q.is_leaf and q.operation in RANGE_CONDITIONS:
+                old = qrange.get(q.operation)
+                value = q.value
+                if old:
+                    value = self._CONFLICT_MERGE_MAP[(q.operation, self.operator)](old, value)  # noqa
+                qrange[q.operation] = value
+            if q.is_leaf and q.operation == Condition.RANGE:
+                for op, new in q.value.to_dict().items():
+                    old = qrange.get(op)
+                    qrange[op] = self._CONFLICT_MERGE_MAP[(q.operation, self.operator)](old, value)  # noqa
+            else:
+                childs.append(q)
+        if qrange:
+            if len(qrange) > 2:
+                "TODO "
+                # Merge
+            childs.append(Q(
+                operation=Condition.RANGE,
+                value=Range.from_dict(qrange)
+            ))
+        return self._replace(childs=childs)
 
     @unpack_magic
     def __lt__(self, value):
@@ -132,10 +212,12 @@ class QNumericBoostMixin:
 
 
 def _is_onefield(q1, q2):
+    if not q1:
+        return False
     if q2:
-        return q1.field if q1.field == q2.field else False
+        return q1 if q1.is_field == q2.is_field else False
     else:
-        return q1.field if q1 else False
+        return q1 if q1.field else False
 
 
 QTuple = namedtuple(
@@ -181,6 +263,7 @@ class BaseQ(QTuple):
                 childs=(), inverted=False, operator=DEFAULT_OPERATOR,
                 boost=1, **kwargs):
         args = list(args)
+
         if len(args) and isinstance(args[0], str):
             if args[0] in ['AND', 'OR']:
                 operator = args.pop(0)
@@ -188,13 +271,17 @@ class BaseQ(QTuple):
                 field = args.pop(0)
 
         # simple constructor
-        if field or childs:
+        if field or childs or value is not NoValue:
             childs = tuple(childs)
             return super().__new__(
                 cls,
-                field, operation, value, operator,
-                inverted, childs, boost
-
+                field=field,
+                operation=operation,
+                value=value,
+                operator=operator,
+                inverted=inverted,
+                childs=childs,
+                boost=boost,
             )
 
         # magic
@@ -212,7 +299,7 @@ class BaseQ(QTuple):
                 item = '__'.join(key.split('__')[0:-1]) if '__' in key else key
                 operation = key.split('__')[-1] if '__' in key else 'eq'
                 childs.append(
-                    cls(field=item, operation=operation, _value=value)
+                    cls(field=item, operation=operation, value=value)
                 )
 
             if len(childs) == 1:  # one Kwarg with no nested Q
@@ -222,11 +309,26 @@ class BaseQ(QTuple):
 
     def __repr__(self):
         is_not = ' NOT' if self.inverted else ''
-        if self.qtype == Q.CONDITION:
-            template = "<Q^{0.boost!s} {0.field!s}{is_not} {0.operation!s} {0.value!r}>"  # noqa
+        boost = '^{}'.format(self.boost) if self.boost != 1 else ''
+        field = self.field or ''
+        operation = self.operation or ''
+        if self.childs:
+            value = ' '.join([
+                '(',
+                ' {} '.format(self.operator).join(repr(q) for q in self.childs),  # noqa
+                ')'
+            ])
         else:
-            template = "<Q^{0.boost!s}  {0.operator!s} {is_not} {0.childs!r}>"  # noqa
-        return template.format(self, is_not=is_not)
+            value = repr(self.value)
+
+        template = '<Q {field!s}{boost}{is_not} {operation} {value}>'  # noqa
+        return template.format(
+            field=field,
+            boost=boost,
+            operation=operation,
+            is_not=is_not,
+            value=value
+        )
 
     def _serialize_as_dict(self):
         return {k: getattr(self, k) for k in self.__slots__}
@@ -268,19 +370,23 @@ class Q(QComparisonMixin, QShiftContainsMixin, QNumericBoostMixin, BaseQ):
 
     # TODO: rewrite to use namedtuple
     def _make_q_operation(self, operation, value):
+        print(self, operation, value)
         if self.is_leaf:
-            q = Q(field=self.field, operation=operation, value=value)
             if self.operation:
                 # Merge conditions
-                return Q(childs=(self, q))
+                return Q(
+                    field=self.field,
+                    childs=(
+                        self._replace(field=None),
+                        Q(operation=operation, value=value)
+                    )
+                )
             # Add operation to existing Q object
-            return q
-            # q = Q(field=self.field, operation=operation, _value=value)
-            # pass
+            return self._replace(operation=operation, value=value)
             # TODO: maybe check all childs field ... and in some case append
         elif self.is_field:
-            q = Q(field=self.field, operation=operation, value=value)
-            return Q(childs=self.childs + (q))
+            q = Q(operation=operation, value=value)
+            return self._replace(field=self.is_field, child=self.childs + (q))
         else:
             raise ValueError(
                 'Can not use comparsion of complex Q with multuple fields')
