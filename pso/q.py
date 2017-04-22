@@ -16,35 +16,19 @@ from functools import reduce
 from functools import wraps
 from collections.abc import Iterable
 from collections import namedtuple
+import ipdb
 
 
-class Range(namedtuple('Range', ['fr', 'to', 'fr_incl', 'to_incl'])):
+class _NoValue:
+    """
+    To check when value is explicitly None or False
+    """
+    @staticmethod
+    def __bool__():
+        return False
 
-    @classmethod
-    def from_dict(cls, d):
-        if Condition.GE in d:
-            fr, fr_incl = d[Condition.GE], True
-        else:
-            fr, fr_incl = d[Condition.GT], False
 
-        if Condition.LE in d:
-            to, to_incl = d[Condition.LE], True
-        else:
-            to, to_incl = d[Condition.LT], False
-        return cls(fr, to, fr_incl, to_incl)
-
-    def to_dict(self):
-        d = {}
-        d[Condition.GE if self.fr_incl else Condition.GT] = self.fr
-        d[Condition.LE if self.to_incl else Condition.LT] = self.to
-        return d
-
-    @classmethod
-    def from_range(cls, r):
-        """
-        Ability to use Python's standart range object
-        """
-        cls(r.start, r.end, True, False)
+NoValue = _NoValue()
 
 
 class Operator:
@@ -74,6 +58,83 @@ RANGE_CONDITIONS = [
 ]
 
 
+class Range(namedtuple('Range', ['fr', 'to', 'fr_incl', 'to_incl'])):
+
+    def __new__(cls, fr=NoValue, to=NoValue, fr_incl=False, to_incl=False):
+        return super(Range, cls).__new__(cls, fr, to, fr_incl, to_incl)
+
+    def _check_overlap(self, other):
+        # ipdb.set_trace(context=50)
+        if self.to and other.fr:
+            incl = (self.to_incl or other.fr_incl)
+            if other.fr > self.to or (other.fr == self.to and not incl):
+                return False
+
+        if self.fr and other.to:
+            incl = (self.fr_incl or other.to_incl)
+            if self.fr > other.to or (self.fr == other.to and not incl):
+                return False
+
+        return True
+
+    @staticmethod
+    def _merge(func, v1, v2):
+        if v1[0] and v2[0]:
+            return func(v1, v2)
+        else:
+            return v1 if v1[0] else v2
+
+    def merge(self, other, operator):
+        if operator is Operator.OR:
+            return self.__or__(other)
+        else:
+            return self.__and__(other)
+
+    def __and__(self, other):
+        """
+        Merge range with AND operator
+        """
+        # ipdb.set_trace(context=50)
+        if not self._check_overlap(other):
+            raise ValueError("Can not merge non overlapped ranges")
+
+        fr, fr_incl = self._merge(
+            max, (self.fr, not self.fr_incl), (other.fr, not other.fr_incl))
+        fr_incl = not fr_incl
+
+        to, to_incl = self._merge(
+            min, (self.to, self.to_incl), (other.to, other.to_incl))
+
+        return Range(fr, to, fr_incl, to_incl)
+
+    def __or__(self, other):
+        """
+        Merge range with AND operator
+        """
+        if not self._check_overlap(other):
+            raise ValueError("Can not merge non overlapped ranges")
+
+        fr, fr_incl = self._merge(
+            min, (self.fr, not self.fr_incl), (other.fr, not other.fr_incl))
+        fr_incl = not fr_incl
+
+        to, to_incl = self._merge(
+            max, (self.to, self.to_incl), (other.to, other.to_incl))
+
+        return Range(fr, to, fr_incl, to_incl)
+
+    @classmethod
+    def from_range(cls, r):
+        """
+        Ability to use Python's standart range object
+
+        Model.field_name == range(0, 100) -> {0 TO 100}
+        Model.field_name == range(0, 100, True) -> [0 TO 100]
+        """
+        include = (True, True) if r.step is True else (False, False)
+        cls(r.start, r.end, *include)
+
+
 def unpack_magic(method):
     """
     Method decorator used to unpack Iterable items,
@@ -93,64 +154,42 @@ def unpack_magic(method):
     return unpack
 
 
-class NoValue:
-    """
-    To check when value is explicitly None or False
-    """
-
-
 class QComparisonMixin():
     """QComparisonMixin - defines comparsion magic for Q objects"""
 
-    _CONFLICT_MERGE_MAP = {
-        (Condition.LT, Operator.AND): min,
-        (Condition.LE, Operator.AND): min,
-        (Condition.GT, Operator.AND): max,
-        (Condition.GE, Operator.AND): max,
-
-        (Condition.LT, Operator.OR): max,
-        (Condition.LE, Operator.OR): max,
-        (Condition.GT, Operator.OR): min,
-        (Condition.GE, Operator.OR): min,
-    }
-
-    def _merge_range_condition(self):
+    def _merge_ranges(self):
+        # ipdb.set_trace(context=50)
         if self.is_leaf or not self.is_field:
-            return
+            return self
+        childs = list(self.childs)
+        ranges = filter(lambda x: x.operation is Condition.RANGE, childs)
+        previous = None
 
-        qrange = {}
-        childs = []
-        # TODO boost check
-        for q in self.childs:
-            if q.is_leaf and q.operation in RANGE_CONDITIONS:
-                old = qrange.get(q.operation)
-                value = q.value
-                if old:
-                    value = self._CONFLICT_MERGE_MAP[(q.operation, self.operator)](old, value)  # noqa
-                qrange[q.operation] = value
-            if q.is_leaf and q.operation == Condition.RANGE:
-                for op, new in q.value.to_dict().items():
-                    old = qrange.get(op)
-                    qrange[op] = self._CONFLICT_MERGE_MAP[(q.operation, self.operator)](old, value)  # noqa
-            else:
-                childs.append(q)
-        if qrange:
-            if len(qrange) > 2:
-                "TODO "
-                # Merge
-            childs.append(Q(
-                operation=Condition.RANGE,
-                value=Range.from_dict(qrange)
-            ))
-        return self._replace(childs=childs)
+        for q in sorted(ranges, key=lambda x: (x.value.fr is not NoValue, x.value.fr, x.value.to is NoValue, x.value.to)):
+            try:
+                # TODO predefine 'previos'
+                childs.append(
+                    q._replace(value=previous.value.merge(q.value, self.operator))
+                )
+                childs.remove(q)
+                childs.remove(previous)
+            except:
+                continue
+            finally:
+                previous = q
+        return self._replace(childs=tuple(childs))
 
     @unpack_magic
     def __lt__(self, value):
-        return self._make_q_operation(Condition.LT, value)
+        return self\
+            ._make_q_operation(Condition.RANGE, Range(to=value, to_incl=False))\
+            ._merge_ranges()
 
     @unpack_magic
     def __le__(self, value):
-        return self._make_q_operation(Condition.LE, value)
+        return self\
+            ._make_q_operation(Condition.RANGE, Range(to=value, to_incl=True))\
+            ._merge_ranges()
 
     @unpack_magic
     def __eq__(self, value):
@@ -162,11 +201,17 @@ class QComparisonMixin():
 
     @unpack_magic
     def __gt__(self, value):
-        return self._make_q_operation(Condition.GT, value)
+        return self\
+            ._make_q_operation(Condition.RANGE, Range(fr=value, fr_incl=False))\
+            ._merge_ranges()
 
     @unpack_magic
     def __ge__(self, value):
-        return self._make_q_operation(Condition.GE, value)
+        print(value)
+        print(Range(10, 20, False, False))
+        return self\
+            ._make_q_operation(Condition.RANGE, Range(fr=value, fr_incl=True))\
+            ._merge_ranges()
 
     def __contains__(self, value):
         """To use reverse in operator as contains operation
@@ -338,6 +383,37 @@ class BaseQ(QTuple):
         self.inverted = not self.inverted
         return self
 
+    def __and__(self, other):
+        return self._merge_condition(other, Operator.AND)
+
+    def __or__(self, other):
+        return self._merge_condition(other, Operator.OR)
+
+
+class Q(QComparisonMixin, QShiftContainsMixin, QNumericBoostMixin, BaseQ):
+
+    def _make_q_operation(self, operation, value):
+        print(self, operation, value)
+        if self.is_leaf:
+            if self.operation:
+                # Merge conditions
+                return Q(
+                    field=self.field,
+                    childs=(
+                        self._replace(field=None),
+                        Q(operation=operation, value=value)
+                    )
+                )._merge_ranges()
+            # Add operation to existing Q object
+            return self._replace(operation=operation, value=value)
+            # TODO: maybe check all childs field ... and in some case append
+        elif self.is_field:
+            q = Q(operation=operation, value=value)
+            return self._replace(field=self.is_field, child=self.childs + (q))._merge_ranges()
+        else:
+            raise ValueError(
+                'Can not use comparsion of complex Q with multuple fields')
+
     def _merge_condition(self, other, operator=Operator.AND):
         if not isinstance(other, Q):
             return NotImplemented
@@ -357,36 +433,6 @@ class BaseQ(QTuple):
         else:
             childs.append(other)
 
-        return Q(operator, childs=tuple(childs))
+        childs = self._merge_ranges(childs)
 
-    def __and__(self, other):
-        return self._merge_condition(other, Operator.AND)
-
-    def __or__(self, other):
-        return self._merge_condition(other, Operator.OR)
-
-
-class Q(QComparisonMixin, QShiftContainsMixin, QNumericBoostMixin, BaseQ):
-
-    # TODO: rewrite to use namedtuple
-    def _make_q_operation(self, operation, value):
-        print(self, operation, value)
-        if self.is_leaf:
-            if self.operation:
-                # Merge conditions
-                return Q(
-                    field=self.field,
-                    childs=(
-                        self._replace(field=None),
-                        Q(operation=operation, value=value)
-                    )
-                )
-            # Add operation to existing Q object
-            return self._replace(operation=operation, value=value)
-            # TODO: maybe check all childs field ... and in some case append
-        elif self.is_field:
-            q = Q(operation=operation, value=value)
-            return self._replace(field=self.is_field, child=self.childs + (q))
-        else:
-            raise ValueError(
-                'Can not use comparsion of complex Q with multuple fields')
+        return Q(operator, childs=tuple(childs))._merge_ranges()
