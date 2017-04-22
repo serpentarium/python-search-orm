@@ -132,7 +132,7 @@ class Range(namedtuple('Range', ['fr', 'to', 'fr_incl', 'to_incl'])):
         Model.field_name == range(0, 100, True) -> [0 TO 100]
         """
         include = (True, True) if r.step is True else (False, False)
-        cls(r.start, r.end, *include)
+        return cls(r.start, r.stop, *include)
 
 
 def unpack_magic(method):
