@@ -16,7 +16,6 @@ from functools import reduce
 from functools import wraps
 from collections.abc import Iterable
 from collections import namedtuple
-import ipdb
 
 
 class _NoValue:
@@ -64,7 +63,6 @@ class Range(namedtuple('Range', ['fr', 'to', 'fr_incl', 'to_incl'])):
         return super(Range, cls).__new__(cls, fr, to, fr_incl, to_incl)
 
     def _check_overlap(self, other):
-        # ipdb.set_trace(context=50)
         if self.to and other.fr:
             incl = (self.to_incl or other.fr_incl)
             if other.fr > self.to or (other.fr == self.to and not incl):
@@ -94,7 +92,6 @@ class Range(namedtuple('Range', ['fr', 'to', 'fr_incl', 'to_incl'])):
         """
         Merge range with AND operator
         """
-        # ipdb.set_trace(context=50)
         if not self._check_overlap(other):
             raise ValueError("Can not merge non overlapped ranges")
 
@@ -158,7 +155,6 @@ class QComparisonMixin():
     """QComparisonMixin - defines comparsion magic for Q objects"""
 
     def _merge_ranges(self):
-        # ipdb.set_trace(context=50)
         if self.is_leaf or not self.is_field:
             return self
         childs = list(self.childs)
@@ -207,8 +203,6 @@ class QComparisonMixin():
 
     @unpack_magic
     def __ge__(self, value):
-        print(value)
-        print(Range(10, 20, False, False))
         return self\
             ._make_q_operation(Condition.RANGE, Range(fr=value, fr_incl=True))\
             ._merge_ranges()
@@ -393,7 +387,6 @@ class BaseQ(QTuple):
 class Q(QComparisonMixin, QShiftContainsMixin, QNumericBoostMixin, BaseQ):
 
     def _make_q_operation(self, operation, value):
-        print(self, operation, value)
         if self.is_leaf:
             if self.operation:
                 # Merge conditions
