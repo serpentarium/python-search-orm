@@ -26,6 +26,10 @@ class _NoValue:
     def __bool__():
         return False
 
+    @staticmethod
+    def __repr__():
+        return "NoValue"
+
 
 NoValue = _NoValue()
 
@@ -161,19 +165,24 @@ class QComparisonMixin():
         ranges = filter(lambda x: x.operation is Condition.RANGE, childs)
         previous = None
 
+        # TODO: move sort func, to utils
         for q in sorted(ranges, key=lambda x: (x.value.fr is not NoValue, x.value.fr, x.value.to is NoValue, x.value.to)):
             try:
                 # TODO predefine 'previos'
-                childs.append(
-                    q._replace(value=previous.value.merge(q.value, self.operator))
-                )
+                childs.append(q._replace(
+                    value=previous.value.merge(q.value, self.operator)
+                ))
                 childs.remove(q)
                 childs.remove(previous)
             except:
                 continue
             finally:
                 previous = q
-        return self._replace(childs=tuple(childs))
+
+        if len(childs) == 1:  # Remove unusefull parent
+            return childs[0]._replace(field=self.field)
+        else:
+            return self._replace(childs=tuple(childs))
 
     @unpack_magic
     def __lt__(self, value):
@@ -402,7 +411,7 @@ class Q(QComparisonMixin, QShiftContainsMixin, QNumericBoostMixin, BaseQ):
             # TODO: maybe check all childs field ... and in some case append
         elif self.is_field:
             q = Q(operation=operation, value=value)
-            return self._replace(field=self.is_field, child=self.childs + (q))._merge_ranges()
+            return self._replace(field=self.is_field, childs=self.childs + (q))._merge_ranges()
         else:
             raise ValueError(
                 'Can not use comparsion of complex Q with multuple fields')
@@ -425,7 +434,5 @@ class Q(QComparisonMixin, QShiftContainsMixin, QNumericBoostMixin, BaseQ):
             childs.extend(list(other.childs))
         else:
             childs.append(other)
-
-        childs = self._merge_ranges(childs)
 
         return Q(operator, childs=tuple(childs))._merge_ranges()

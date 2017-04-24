@@ -14,7 +14,7 @@ r8 = Range(to=-10, to_incl=True)
 r9 = Range(to=10, to_incl=True)
 
 
-class TestRangeMerge(unittest.TestCase):
+class TestRange(unittest.TestCase):
 
     def test_010_create_range(t):
         "Range creating"
