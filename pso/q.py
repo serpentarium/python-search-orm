@@ -137,6 +137,7 @@ class Range(namedtuple('Range', ['fr', 'to', 'fr_incl', 'to_incl'])):
 
 
 def unpack_magic(method):
+    return method  # just disable.
     """
     Method decorator used to unpack Iterable items,
     create and return multiple same Q objects for each value
@@ -161,28 +162,41 @@ class QComparisonMixin():
     def _merge_ranges(self):
         if self.is_leaf or not self.is_field:
             return self
-        childs = list(self.childs)
-        ranges = filter(lambda x: x.operation is Condition.RANGE, childs)
+        tmp_childs = set(self.childs)
+        ranges = filter(lambda x: x.operation is Condition.RANGE, tmp_childs)
         previous = None
 
         # TODO: move sort func, to utils
         for q in sorted(ranges, key=lambda x: (x.value.fr is not NoValue, x.value.fr, x.value.to is NoValue, x.value.to)):
             try:
                 # TODO predefine 'previos'
-                childs.append(q._replace(
+                tmp_childs.add(q._replace(
                     value=previous.value.merge(q.value, self.operator)
                 ))
-                childs.remove(q)
-                childs.remove(previous)
+                tmp_childs.remove(q)
+                tmp_childs.remove(previous)
             except:
                 continue
             finally:
                 previous = q
 
-        if len(childs) == 1:  # Remove unusefull parent
-            return childs[0]._replace(field=self.field)
+        if len(tmp_childs) == 1:  # Remove unusefull parent
+            child = tmp_childs.pop()
+            kwargs = {}
+            if child.field:
+                kwargs['field'] = child.field
+
+            return self._replace(
+                childs=(),
+                value=child.value,
+                operation=child.operation,
+                # TODO check how the nested boost works
+                boost=self.boost * child.boost,
+                inverted=self.inverted ^ child.inverted,
+                **kwargs
+            )
         else:
-            return self._replace(childs=tuple(childs))
+            return self._replace(childs=tuple(tmp_childs))
 
     @unpack_magic
     def __lt__(self, value):
@@ -215,19 +229,6 @@ class QComparisonMixin():
         return self\
             ._make_q_operation(Condition.RANGE, Range(fr=value, fr_incl=True))\
             ._merge_ranges()
-
-    def __contains__(self, value):
-        """To use reverse in operator as contains operation
-
-        Can be working later:
-        >>> 'teacher' in Profile.bio
-        >>> iterable in Q('searchfield')  # Bad use case
-        Not working:
-        >>> Q('somefield') in iterable
-        Because there is no reverse __contains__ method or fallback.
-        __contains__ shoud return boolean value
-        """
-        return self._make_q_operation(Condition.IN, value)
 
 
 class QShiftContainsMixin:
@@ -378,9 +379,6 @@ class BaseQ(QTuple):
             value=value
         )
 
-    def _serialize_as_dict(self):
-        return {k: getattr(self, k) for k in self.__slots__}
-
     # Logical tree
     def __invert__(self):
         self.inverted = not self.inverted
@@ -394,6 +392,9 @@ class BaseQ(QTuple):
 
 
 class Q(QComparisonMixin, QShiftContainsMixin, QNumericBoostMixin, BaseQ):
+
+    def __hash__(self):
+        return hash(tuple(self))
 
     def _make_q_operation(self, operation, value):
         if self.is_leaf:

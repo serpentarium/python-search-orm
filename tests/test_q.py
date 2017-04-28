@@ -15,6 +15,8 @@ q1 = ('field2', None, NoValue, Q.DEFAULT_OPERATOR, False, (), 1)
 q2 = ('field1', Condition.LT, 999, Q.DEFAULT_OPERATOR, False, (), 1)
 q3 = ('field3', None, NoValue, Q.DEFAULT_OPERATOR, False, (), 1)
 q4 = (None, None, None, Q.DEFAULT_OPERATOR, False, (q1, q2, q3), 1)
+q5 = ('field2', Condition.EQ, 'SearchText', Q.DEFAULT_OPERATOR, False, (), 1)
+q6 = ('field1', Condition.RANGE, Range(fr=17, fr_incl=True), Q.DEFAULT_OPERATOR, False, (), 1)
 
 
 def make_kw(tpl):
@@ -94,9 +96,21 @@ class TestQ(unittest.TestCase):
             msg="Range merge Err. (Q > 17 ) <= 100"
         )
 
-    @unittest.skip("Need compact childs grouped by field on merge_condition.")
+    # @unittest.skip("Need compact childs grouped by field on merge_condition.")
     def test_060_aggregate_by_logical_operators(t):
         "Create aggregations by & - AND, | - OR operators"
-        qs = (Q('field1') >= 17) | (Q('field2') == "SomeText") | (Q('field1') >= 19)
-        print(qs)
-        raise ValueError()
+        qs = (Q('field2') == "SearchText") | (Q('field1') >= 17) | (Q('field1') >= 19)
+        print(
+            [tuple(q) for q in qs.childs], [q6, q5],
+        )
+#         t.assertListEqual(
+        # [tuple(q) for q in qs.childs], [q6, q5],
+        # msg="Merging Q with ranges error"
+        # )
+#         qs = (Q('field1') >= 17) | (Q('field2') == "SomeText") | (Q('field1') >= 19)
+        # print(qs)
+        # raise ValueError()
+
+
+if __name__ == '__main__':
+    unittest.main()
