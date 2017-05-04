@@ -17,15 +17,16 @@ q3 = ('field3', None, NoValue, Q.DEFAULT_OPERATOR, False, (), 1)
 q4 = (None, None, None, Q.DEFAULT_OPERATOR, False, (q1, q2, q3), 1)
 q5 = ('field2', Condition.EQ, 'SearchText', Q.DEFAULT_OPERATOR, False, (), 1)
 q6 = ('field1', Condition.RANGE, Range(fr=17, fr_incl=True), Q.DEFAULT_OPERATOR, False, (), 1)
+q7 = ('field2', Condition.EQ, 1488, Q.DEFAULT_OPERATOR, True, (), 1)
 
 
 def make_kw(tpl):
     return dict(zip(Q._fields, tpl))
 
 
-def q_range(rng):
+def q_range(rng, op=Q.DEFAULT_OPERATOR):
     return ('field1', Condition.RANGE, rng,
-            Q.DEFAULT_OPERATOR, False, (), 1)
+            op, False, (), 1)
 
 
 class TestQ(unittest.TestCase):
@@ -96,18 +97,48 @@ class TestQ(unittest.TestCase):
             msg="Range merge Err. (Q > 17 ) <= 100"
         )
 
-    # @unittest.skip("Need compact childs grouped by field on merge_condition.")
+    def test_051_q_range_merge(t):
+        "Merging Ranges in Q objects"
+
+        t.assertEqual(
+            q_range(
+                Range(fr=17, to=100, fr_incl=False, to_incl=True),
+            ),
+            tuple((Q('field1') <= 100) | (Q('field1') > 17)),
+            msg="Range OR merge error"
+        )
+
+    def test_052_q_range_merge(t):
+        "Merging Ranges in Q objects"
+        qs = (Q('field1') > 44) | (Q('field1') > 33)
+
+        t.assertEqual(
+            q_range(Range(fr=33, fr_incl=False)),
+            tuple(qs),
+            msg="Range OR merge error"
+        )
+
     def test_060_aggregate_by_logical_operators(t):
         "Create aggregations by & - AND, | - OR operators"
-        qs = (Q('field2') == "SearchText") | (Q('field1') >= 17) | (Q('field1') >= 19)
-        print(
-            [tuple(q) for q in qs.childs], [q6, q5],
+        qs = (Q('field1') >= 17) | (Q('field1') >= 19)  # noqa
+        t.assertEqual(tuple(qs), q6)
+
+    def test_061_aggregate_by_logical_operators(t):
+        "Merge aggregated Qs within one field"
+        qs = (Q('field1') != 1488) | (Q('field1') >= 17) | (Q('field1') >= 19)  # noqa
+        t.assertListEqual(
+            [tuple(q) for q in qs.childs], [q6, q7],
+            msg="Merging aggregated Q with one field error"
         )
-#         t.assertListEqual(
-        # [tuple(q) for q in qs.childs], [q6, q5],
-        # msg="Merging Q with ranges error"
-        # )
-#         qs = (Q('field1') >= 17) | (Q('field2') == "SomeText") | (Q('field1') >= 19)
+
+    @unittest.skip("Multifield merge")
+    def test_061_aggregate_by_logical_operators(t):
+        qs = (Q('field2') == "SearchText") | (Q('field1') >= 17) | (Q('field1') >= 19)  # noqa
+        t.assertListEqual(
+            [tuple(q) for q in qs.childs], [q6, q5],
+            msg="Merging Q with ranges error"
+        )
+        # qs = (Q('field1') >= 17) | (Q('field2') == "SomeText") | (Q('field1') >= 19)
         # print(qs)
         # raise ValueError()
 

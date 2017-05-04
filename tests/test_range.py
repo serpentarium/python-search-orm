@@ -54,3 +54,18 @@ class TestRange(unittest.TestCase):
 
         # Here, works fine.
         t.assertEqual(r6 | r9, Range(-10, 10, True, True))
+
+    def test_060_test_endless_merge(t):
+        "Merge ranges without start or end parameter"
+
+        r = Range(fr=10) | Range(fr=9)
+        t.assertEqual(r.fr, 9, msg="'OR' Merge start error")
+
+        r = Range(fr=10) & Range(fr=9)
+        t.assertEqual(r.fr, 10, msg="'END' Merge start error")
+
+        r = Range(to=10) | Range(to=9)
+        t.assertEqual(r.to, 10, msg="'OR' Merge end error")
+
+        r = Range(to=10) & Range(to=9)
+        t.assertEqual(r.to, 9, msg="'END' Merge end error")

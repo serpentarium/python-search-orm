@@ -16,6 +16,26 @@ from functools import reduce
 from functools import wraps
 from collections.abc import Iterable
 from collections import namedtuple
+import logging
+
+
+log = logging.getLogger(__name__)
+log.setLevel(logging.DEBUG)
+
+
+def log_this(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        res = func(*args, **kwargs)
+        msg = "{} = \033[32m{}\033[39m({}, {})"
+        log.debug(msg.format(
+            res,
+            func.__name__,
+            args,
+            kwargs
+        ))
+        return res
+    return wrapper
 
 
 class _NoValue:
@@ -86,12 +106,14 @@ class Range(namedtuple('Range', ['fr', 'to', 'fr_incl', 'to_incl'])):
         else:
             return v1 if v1[0] else v2
 
+    @log_this
     def merge(self, other, operator):
         if operator is Operator.OR:
             return self.__or__(other)
         else:
             return self.__and__(other)
 
+    @log_this
     def __and__(self, other):
         """
         Merge range with AND operator
@@ -108,6 +130,7 @@ class Range(namedtuple('Range', ['fr', 'to', 'fr_incl', 'to_incl'])):
 
         return Range(fr, to, fr_incl, to_incl)
 
+    @log_this
     def __or__(self, other):
         """
         Merge range with AND operator
@@ -159,7 +182,9 @@ def unpack_magic(method):
 class QComparisonMixin():
     """QComparisonMixin - defines comparsion magic for Q objects"""
 
+    @log_this
     def _merge_ranges(self):
+        # TODO: Split this func.
         if self.is_leaf or not self.is_field:
             return self
         tmp_childs = set(self.childs)
@@ -170,11 +195,13 @@ class QComparisonMixin():
         for q in sorted(ranges, key=lambda x: (x.value.fr is not NoValue, x.value.fr, x.value.to is NoValue, x.value.to)):
             try:
                 # TODO predefine 'previos'
-                tmp_childs.add(q._replace(
-                    value=previous.value.merge(q.value, self.operator)
-                ))
+                merged_range = previous.value.merge(q.value, self.operator)
+
                 tmp_childs.remove(q)
                 tmp_childs.remove(previous)
+                tmp_childs.add(q._replace(
+                    value=merged_range,
+                ))
             except:
                 continue
             finally:
@@ -190,6 +217,7 @@ class QComparisonMixin():
                 childs=(),
                 value=child.value,
                 operation=child.operation,
+                operator=Q.DEFAULT_OPERATOR,
                 # TODO check how the nested boost works
                 boost=self.boost * child.boost,
                 inverted=self.inverted ^ child.inverted,
@@ -232,10 +260,8 @@ class QComparisonMixin():
 
 
 class QShiftContainsMixin:
-    """Used to search by IN
-    Like:
-    Q('category') >> ['commedy', 'dramma', 'western']
-    Q('tags') << 'sometag'
+    """
+    Unusefull, because IN applied automaticly for multifield
     """
 
     def __rshift__(self, value):
@@ -270,7 +296,7 @@ def _is_onefield(q1, q2):
 
 
 QTuple = namedtuple(
-    'BaseBaseQ',
+    'QTuple',
     [
         'field', 'operation', 'value', 'operator', 'inverted',
         'childs', 'boost'
@@ -396,6 +422,7 @@ class Q(QComparisonMixin, QShiftContainsMixin, QNumericBoostMixin, BaseQ):
     def __hash__(self):
         return hash(tuple(self))
 
+    @log_this
     def _make_q_operation(self, operation, value):
         if self.is_leaf:
             if self.operation:
@@ -417,6 +444,7 @@ class Q(QComparisonMixin, QShiftContainsMixin, QNumericBoostMixin, BaseQ):
             raise ValueError(
                 'Can not use comparsion of complex Q with multuple fields')
 
+    @log_this
     def _merge_condition(self, other, operator=Operator.AND):
         if not isinstance(other, Q):
             return NotImplemented
