@@ -1,5 +1,5 @@
 import unittest
-from pso.q import Range
+from pso.range import Range
 from pso.q import NoValue
 
 

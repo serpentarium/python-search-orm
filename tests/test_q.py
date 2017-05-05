@@ -5,11 +5,11 @@ those operators is overloaded and produce new Q instead of result.
 AssertEqueal and other methods simply doesn't work
 """
 import unittest
-from pso.q import Range
+from pso.range import Range
 from pso.q import Q
-from pso.q import NoValue
-from pso.q import Condition
-from pso.q import Operator
+from pso.constants import NoValue
+from pso.constants import Condition
+from pso.constants import Operator
 
 q1 = ('field2', None, NoValue, Q.DEFAULT_OPERATOR, False, (), 1)
 q2 = ('field1', Condition.LT, 999, Q.DEFAULT_OPERATOR, False, (), 1)
@@ -17,7 +17,10 @@ q3 = ('field3', None, NoValue, Q.DEFAULT_OPERATOR, False, (), 1)
 q4 = (None, None, None, Q.DEFAULT_OPERATOR, False, (q1, q2, q3), 1)
 q5 = ('field2', Condition.EQ, 'SearchText', Q.DEFAULT_OPERATOR, False, (), 1)
 q6 = ('field1', Condition.RANGE, Range(fr=17, fr_incl=True), Q.DEFAULT_OPERATOR, False, (), 1)
-q7 = ('field2', Condition.EQ, 1488, Q.DEFAULT_OPERATOR, True, (), 1)
+q7 = ('field1', Condition.EQ, 1488, Q.DEFAULT_OPERATOR, True, (), 1)
+
+q8 = (None, Condition.RANGE, Range(fr=17, fr_incl=True), Q.DEFAULT_OPERATOR, False, (), 1)
+q9 = (None, Condition.EQ, 1488, Q.DEFAULT_OPERATOR, True, (), 1)
 
 
 def make_kw(tpl):
@@ -126,21 +129,22 @@ class TestQ(unittest.TestCase):
     def test_061_aggregate_by_logical_operators(t):
         "Merge aggregated Qs within one field"
         qs = (Q('field1') != 1488) | (Q('field1') >= 17) | (Q('field1') >= 19)  # noqa
-        t.assertListEqual(
-            [tuple(q) for q in qs.childs], [q6, q7],
+        t.assertSetEqual(
+            set(tuple(q) for q in qs.childs), {q8, q9},
             msg="Merging aggregated Q with one field error"
         )
 
-    @unittest.skip("Multifield merge")
-    def test_061_aggregate_by_logical_operators(t):
+    def test_062_aggregate_by_logical_operators(t):
         qs = (Q('field2') == "SearchText") | (Q('field1') >= 17) | (Q('field1') >= 19)  # noqa
-        t.assertListEqual(
-            [tuple(q) for q in qs.childs], [q6, q5],
+        t.assertSetEqual(
+            set(tuple(q) for q in qs.childs), {q6, q5},
             msg="Merging Q with ranges error"
         )
-        # qs = (Q('field1') >= 17) | (Q('field2') == "SomeText") | (Q('field1') >= 19)
-        # print(qs)
-        # raise ValueError()
+        qs = (Q('field1') >= 17) | (Q('field2') == "SearchText") | (Q('field1') >= 19)  # noqa
+        t.assertSetEqual(
+            set(tuple(q) for q in qs.childs), {q6, q5},
+            msg="Merging Q with ranges error (impact: order)"
+        )
 
 
 if __name__ == '__main__':

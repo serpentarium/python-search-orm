@@ -14,9 +14,16 @@ Article.filter(Article.user_id == Article.edited_by)
 """
 from functools import reduce
 from functools import wraps
-from collections.abc import Iterable
 from collections import namedtuple
+from collections import defaultdict
 import logging
+from datetime import datetime
+
+from pso.constants import NoValue
+from pso.constants import Operator
+from pso.constants import Condition
+from pso.range import Range
+from pso.range import range_sort_func
 
 
 log = logging.getLogger(__name__)
@@ -24,159 +31,20 @@ log.setLevel(logging.DEBUG)
 
 
 def log_this(func):
+    msg_template = "{}: \033[32m{}\033[39m({}, {}) \033[33m=\033[39m {}"
+
     @wraps(func)
     def wrapper(*args, **kwargs):
         res = func(*args, **kwargs)
-        msg = "{} = \033[32m{}\033[39m({}, {})"
-        log.debug(msg.format(
-            res,
+        log.debug(msg_template.format(
+            datetime.now(),
             func.__name__,
             args,
-            kwargs
+            kwargs,
+            res,
         ))
         return res
     return wrapper
-
-
-class _NoValue:
-    """
-    To check when value is explicitly None or False
-    """
-    @staticmethod
-    def __bool__():
-        return False
-
-    @staticmethod
-    def __repr__():
-        return "NoValue"
-
-
-NoValue = _NoValue()
-
-
-class Operator:
-    """Constants to define join operators."""
-    AND = 'AND'
-    OR = 'OR'
-    XOR = 'XOR'
-
-
-class Condition:
-    """Constants to define condition operators"""
-    LT = 'lt'
-    LE = 'le'
-    EQ = 'eq'
-    NE = 'ne'
-    GT = 'gt'
-    GE = 'ge'
-    IN = 'in'
-    RANGE = 'range'
-
-
-RANGE_CONDITIONS = [
-    Condition.LT,
-    Condition.LE,
-    Condition.GT,
-    Condition.GE,
-]
-
-
-class Range(namedtuple('Range', ['fr', 'to', 'fr_incl', 'to_incl'])):
-
-    def __new__(cls, fr=NoValue, to=NoValue, fr_incl=False, to_incl=False):
-        return super(Range, cls).__new__(cls, fr, to, fr_incl, to_incl)
-
-    def _check_overlap(self, other):
-        if self.to and other.fr:
-            incl = (self.to_incl or other.fr_incl)
-            if other.fr > self.to or (other.fr == self.to and not incl):
-                return False
-
-        if self.fr and other.to:
-            incl = (self.fr_incl or other.to_incl)
-            if self.fr > other.to or (self.fr == other.to and not incl):
-                return False
-
-        return True
-
-    @staticmethod
-    def _merge(func, v1, v2):
-        if v1[0] and v2[0]:
-            return func(v1, v2)
-        else:
-            return v1 if v1[0] else v2
-
-    @log_this
-    def merge(self, other, operator):
-        if operator is Operator.OR:
-            return self.__or__(other)
-        else:
-            return self.__and__(other)
-
-    @log_this
-    def __and__(self, other):
-        """
-        Merge range with AND operator
-        """
-        if not self._check_overlap(other):
-            raise ValueError("Can not merge non overlapped ranges")
-
-        fr, fr_incl = self._merge(
-            max, (self.fr, not self.fr_incl), (other.fr, not other.fr_incl))
-        fr_incl = not fr_incl
-
-        to, to_incl = self._merge(
-            min, (self.to, self.to_incl), (other.to, other.to_incl))
-
-        return Range(fr, to, fr_incl, to_incl)
-
-    @log_this
-    def __or__(self, other):
-        """
-        Merge range with AND operator
-        """
-        if not self._check_overlap(other):
-            raise ValueError("Can not merge non overlapped ranges")
-
-        fr, fr_incl = self._merge(
-            min, (self.fr, not self.fr_incl), (other.fr, not other.fr_incl))
-        fr_incl = not fr_incl
-
-        to, to_incl = self._merge(
-            max, (self.to, self.to_incl), (other.to, other.to_incl))
-
-        return Range(fr, to, fr_incl, to_incl)
-
-    @classmethod
-    def from_range(cls, r):
-        """
-        Ability to use Python's standart range object
-
-        Model.field_name == range(0, 100) -> {0 TO 100}
-        Model.field_name == range(0, 100, True) -> [0 TO 100]
-        """
-        include = (True, True) if r.step is True else (False, False)
-        return cls(r.start, r.stop, *include)
-
-
-def unpack_magic(method):
-    return method  # just disable.
-    """
-    Method decorator used to unpack Iterable items,
-    create and return multiple same Q objects for each value
-
-    E.G:
-    Recipe.filter(*Recipe.category == ['cat1', 'cat2', 'cat3'])
-    """
-    @wraps(method)
-    def unpack(self, value):
-        # String is value by itself, skip unpack.
-        if isinstance(value, Iterable) and not isinstance(value, str):
-            # unpack lists here
-            return tuple(method(self, item) for item in value)
-        else:
-            return method(self, value)
-    return unpack
 
 
 class QComparisonMixin():
@@ -192,13 +60,14 @@ class QComparisonMixin():
         previous = None
 
         # TODO: move sort func, to utils
-        for q in sorted(ranges, key=lambda x: (x.value.fr is not NoValue, x.value.fr, x.value.to is NoValue, x.value.to)):
+        for q in sorted(ranges, key=range_sort_func):
             try:
                 # TODO predefine 'previos'
                 merged_range = previous.value.merge(q.value, self.operator)
 
-                tmp_childs.remove(q)
-                tmp_childs.remove(previous)
+                tmp_childs.discard(q)
+                tmp_childs.discard(previous)
+                # !important: remove first
                 tmp_childs.add(q._replace(
                     value=merged_range,
                 ))
@@ -218,7 +87,6 @@ class QComparisonMixin():
                 value=child.value,
                 operation=child.operation,
                 operator=Q.DEFAULT_OPERATOR,
-                # TODO check how the nested boost works
                 boost=self.boost * child.boost,
                 inverted=self.inverted ^ child.inverted,
                 **kwargs
@@ -226,36 +94,30 @@ class QComparisonMixin():
         else:
             return self._replace(childs=tuple(tmp_childs))
 
-    @unpack_magic
     def __lt__(self, value):
         return self\
-            ._make_q_operation(Condition.RANGE, Range(to=value, to_incl=False))\
+            ._make_op(Condition.RANGE, Range(to=value, to_incl=False))\
             ._merge_ranges()
 
-    @unpack_magic
     def __le__(self, value):
         return self\
-            ._make_q_operation(Condition.RANGE, Range(to=value, to_incl=True))\
+            ._make_op(Condition.RANGE, Range(to=value, to_incl=True))\
             ._merge_ranges()
 
-    @unpack_magic
     def __eq__(self, value):
-        return self._make_q_operation(Condition.EQ, value)
+        return self._make_op(Condition.EQ, value)
 
-    @unpack_magic
     def __ne__(self, value):
-        return self._make_q_operation(Condition.NE, value)
+        return -self._make_op(Condition.EQ, value)
 
-    @unpack_magic
     def __gt__(self, value):
         return self\
-            ._make_q_operation(Condition.RANGE, Range(fr=value, fr_incl=False))\
+            ._make_op(Condition.RANGE, Range(fr=value, fr_incl=False))\
             ._merge_ranges()
 
-    @unpack_magic
     def __ge__(self, value):
         return self\
-            ._make_q_operation(Condition.RANGE, Range(fr=value, fr_incl=True))\
+            ._make_op(Condition.RANGE, Range(fr=value, fr_incl=True))\
             ._merge_ranges()
 
 
@@ -265,12 +127,12 @@ class QShiftContainsMixin:
     """
 
     def __rshift__(self, value):
-        return self._make_q_operation(Condition.IN, value)
+        return self._make_op(Condition.IN, value)
 
     __rlshift__ = __rshift__
 
     def __lshift__(self, value):
-        return self._make_q_operation(Condition.IN, value)
+        return self._make_op(Condition.IN, value)
 
     __rrshift__ = __lshift__
 
@@ -407,8 +269,13 @@ class BaseQ(QTuple):
 
     # Logical tree
     def __invert__(self):
-        self.inverted = not self.inverted
-        return self
+        return self._replace(inverted=not self.inverted)
+
+    def __neg__(self):
+        return self._replace(inverted=True)
+
+    def __pos__(self):
+        return self._replace(inverted=False)
 
     def __and__(self, other):
         return self._merge_condition(other, Operator.AND)
@@ -423,7 +290,7 @@ class Q(QComparisonMixin, QShiftContainsMixin, QNumericBoostMixin, BaseQ):
         return hash(tuple(self))
 
     @log_this
-    def _make_q_operation(self, operation, value):
+    def _make_op(self, operation, value):
         if self.is_leaf:
             if self.operation:
                 # Merge conditions
@@ -439,7 +306,9 @@ class Q(QComparisonMixin, QShiftContainsMixin, QNumericBoostMixin, BaseQ):
             # TODO: maybe check all childs field ... and in some case append
         elif self.is_field:
             q = Q(operation=operation, value=value)
-            return self._replace(field=self.is_field, childs=self.childs + (q))._merge_ranges()
+            return self._replace(
+                field=self.is_field,
+                childs=self.childs + (q))._merge_ranges()
         else:
             raise ValueError(
                 'Can not use comparsion of complex Q with multuple fields')
@@ -449,19 +318,46 @@ class Q(QComparisonMixin, QShiftContainsMixin, QNumericBoostMixin, BaseQ):
         if not isinstance(other, Q):
             return NotImplemented
 
-        childs = []
+        childs = set()
         same_invertion = self.inverted == other.inverted
 
-        if self.qtype == Q.AGGREGATION\
-           and self.operator == operator and same_invertion:
-            childs.extend(list(self.childs))
-        else:
-            childs.append(self)
+        unpack_and_join(childs, self, same_invertion, operator)
+        unpack_and_join(childs, other, same_invertion, operator)
 
-        if other.qtype == Q.AGGREGATION\
-           and other.operator == operator and same_invertion:
-            childs.extend(list(other.childs))
-        else:
-            childs.append(other)
+        merge_by_field(childs, operator)
+
+        childs = {q._merge_ranges() for q in childs}
+
+        if len(childs) == 1:
+            return childs.pop()._merge_ranges()
 
         return Q(operator, childs=tuple(childs))._merge_ranges()
+
+
+def unpack_and_join(nested, obj, inv, operator):
+    if obj.qtype == Q.AGGREGATION and obj.operator == operator and inv:
+        nested |= {q if q.is_field else q._replace(field=obj.field)
+                   for q in obj.childs}
+    else:
+        nested.add(obj)
+
+
+@log_this
+def merge_by_field(q_set, op):
+    mapper = defaultdict(set)
+
+    for q in q_set:
+        field = q.is_field
+        if field:
+            mapper[field].add(q)
+
+    for field, queries in mapper.items():
+        if len(queries) == 1:
+            continue
+
+        q_set -= queries
+        q_set.add(Q(
+            field=field,
+            operator=op,
+            childs=(q._replace(field=None) for q in queries)
+        ))
