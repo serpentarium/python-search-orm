@@ -3,6 +3,7 @@ Models meta magic here
 """
 from pso.fields import BaseField
 from pso.query import BaseQuerySet
+from pso.query import QuerySetDescriptor
 
 
 class ModelMetaClass(type):
@@ -11,18 +12,6 @@ class ModelMetaClass(type):
     """
 
     def __new__(meta, name, bases, attr_dict):
-        # TODO rewrite queryset_class inheritance
-        attr_dict['_fields'] = []
-        attr_dict['_stored_fields'] = []
-        queryset_class = attr_dict.get('__queryset_class__', )
-        for base in bases:
-            if issubclass(base, BaseModel):
-                # TODO inherit fields
-                if not queryset_class:
-                    queryset_class = base.__queryset_class__
-        if not queryset_class:
-            queryset_class = BaseQuerySet
-
         fields = []
         stored_fields = []
 
@@ -30,7 +19,7 @@ class ModelMetaClass(type):
             if isinstance(val, list) and len(val) == 1 \
                and isinstance(val[0], BaseField):
                 # this allows to define models like
-                # tage = list(TextField())
+                # tag = list(TextField())
                 val = val[0]
                 attr_dict[attr] = val  # replace attr in object
                 val.multi_valued = True
@@ -47,15 +36,14 @@ class ModelMetaClass(type):
         attr_dict['_stored_fields'] = stored_fields
         attr_dict['_cache'] = {}
 
-        cls = super().__new__(meta, name, bases, attr_dict)
-
-        # Bind QuerySet  # TODO check this
-        setattr(cls, 'objects', queryset_class(cls))
-        return cls
+        return super().__new__(meta, name, bases, attr_dict)
 
 
 class BaseModel(metaclass=ModelMetaClass):
     """Base class for EngineSpecific models"""
+
+    objects = QuerySetDescriptor()
+    queryset_class = BaseQuerySet
 
     def __init__(self, **kwargs):
         self._cache = {}
@@ -65,7 +53,6 @@ class BaseModel(metaclass=ModelMetaClass):
 
     @classmethod
     def get_fields(cls):
-        print(cls, cls._fields)
         return (getattr(cls, name) for name in cls._fields)
 
     def __iter__(self):

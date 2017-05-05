@@ -6,17 +6,27 @@ from pso.q import Q
 from pso.utils import copy_self
 
 
+class QuerySetDescriptor():
+
+    def __get__(self, instance, model):
+        return model.queryset_class(model=model)
+
+    def __set__(self, model, value):
+        raise AttributeError
+
+
 class BaseQuerySet():
     """
     Base queryset class. You shoud be itheritent from it.
     """
 
-    __slots__ = ('_offset', '_limit', '_filter', '_search', '_model', '_prefetch')
+    __slots__ = (
+        '_offset', '_limit', '_filter', '_search', '_model', '_prefetch')
 
     def __init__(self, model=None):
         self._offset = 0
         self._limit = None
-        self._filter = None
+        self._filter = []
         self._search = None
         self._model = model
         self._prefetch = False
@@ -38,13 +48,15 @@ class BaseQuerySet():
     @copy_self
     def filter(new_qs, *args, **kwargs):
         """
-        Filter search subset
+        Filter search subset. Each `.filter()` cached in Solr separately.
+
+        Can be used to cache filtered results by some static information
+        E.G. by:
+            - status = ['in_stock', 'available']
+            - price [100 TO 499] (faceted)
+            - shipping_to = 'USA' or 'WORDWIDE' (multifield)
         """
-        if new_qs._filter is None:
-            new_qs._filter = Q(*args, **kwargs)
-        else:
-            new_qs._filter = new_qs._filter & Q(*args, **kwargs)
-        return new_qs
+        new_qs._filter.append(Q(*args, **kwargs))
 
     @copy_self
     def search(new_qs, *args, **kwargs):
@@ -60,7 +72,7 @@ class BaseQuerySet():
         # Shoud correct work with Q(), ModelFields, and vanilla **kwargs
 
     def __call__(self, *args, **kwargs):
-        return self.filter(*args, **kwargs)
+        return self.search(*args, **kwargs)
 
     @copy_self
     def prefetch(self):
