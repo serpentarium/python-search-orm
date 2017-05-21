@@ -38,7 +38,7 @@ class FieldType():
 
     def add_analyzer(self, analyzer):
         if isinstance(analyzer, AbstractAnalyzer):
-            self._analyzers = analyzer
+            self._analyzers.append(analyzer)
         else:
             raise ValueError("Can not add non Analyzer object")
 
@@ -106,7 +106,7 @@ class BaseField(QComparisonMixin, QShiftContainsMixin):
     def default(self):
         return self._default() if callable(self._default) else self._default
 
-    def _make_q_operation(self, operation, value):
+    def _make_op(self, operation, value):
         return Q(field=self.name, operation=operation, value=value)
 
     def __mul__(self, value):

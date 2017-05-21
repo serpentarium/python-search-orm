@@ -6,25 +6,36 @@ from pso.q import Q
 from pso.utils import copy_self
 
 
+class QuerySetDescriptor():
+
+    def __get__(self, instance, model):
+        return model.queryset_class(model=model)
+
+    def __set__(self, model, value):
+        raise AttributeError
+
+
 class BaseQuerySet():
     """
     Base queryset class. You shoud be itheritent from it.
     """
 
-    __slots__ = ('_offset', '_limit', '_filter', '_search', '_model', '_prefetch')
+    __slots__ = (
+        '_offset', '_limit', '_filter', '_search', '_model', '_prefetch')
 
     def __init__(self, model=None):
         self._offset = 0
         self._limit = None
-        self._filter = None
+        self._filter = []
         self._search = None
         self._model = model
         self._prefetch = False
 
     def __repr__(self):
-        return "<{model_name} QuerySet: {qs_repr} | {limit}{offset}>".format(
+        return "<{model_name} | Search: {search_qs!r} | Filter: {filter_qs!r} | {limit}{offset}>".format(
             model_name=self._model.__name__,
-            qs_repr=repr(self._filter),
+            search_qs=self._search,
+            filter_qs=self._filter,
             limit=" LIMIT {}".format(self._limit) if self._limit else '',
             offset=" OFFSET {}".format(self._offset) if self._offset else '',
         )
@@ -38,12 +49,15 @@ class BaseQuerySet():
     @copy_self
     def filter(new_qs, *args, **kwargs):
         """
-        Filter search subset
+        Filter search subset. Each `.filter()` cached in Solr separately.
+
+        Can be used to cache filtered results by some static information
+        E.G. by:
+            - status = ['in_stock', 'available']
+            - price [100 TO 499] (faceted)
+            - shipping_to = 'USA' or 'WORDWIDE' (multifield)
         """
-        if new_qs._filter is None:
-            new_qs._filter = Q(*args, **kwargs)
-        else:
-            new_qs._filter = new_qs._filter & Q(*args, **kwargs)
+        new_qs._filter.append(Q(*args, **kwargs))
         return new_qs
 
     @copy_self
@@ -60,7 +74,7 @@ class BaseQuerySet():
         # Shoud correct work with Q(), ModelFields, and vanilla **kwargs
 
     def __call__(self, *args, **kwargs):
-        return self.filter(*args, **kwargs)
+        return self.search(*args, **kwargs)
 
     @copy_self
     def prefetch(self):
