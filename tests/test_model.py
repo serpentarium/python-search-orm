@@ -17,7 +17,10 @@ class TestModel(unittest.TestCase):
 
             other_prop = "qwerty"
 
-        t.assertEqual(TestModel._fields, ['field1', 'field2', 'field3'])
+        t.assertSetEqual(
+            set(TestModel._fields),
+            {'field1', 'field2', 'field3'}
+        )
         t.assertEqual(TestModel._stored_fields, ['field1'])
         t.assertIsInstance(TestModel.objects, BaseQuerySet)
 

@@ -32,9 +32,10 @@ class BaseQuerySet():
         self._prefetch = False
 
     def __repr__(self):
-        return "<{model_name} QuerySet: {qs_repr} | {limit}{offset}>".format(
+        return "<{model_name} | Search: {search_qs!r} | Filter: {filter_qs!r} | {limit}{offset}>".format(
             model_name=self._model.__name__,
-            qs_repr=repr(self._filter),
+            search_qs=self._search,
+            filter_qs=self._filter,
             limit=" LIMIT {}".format(self._limit) if self._limit else '',
             offset=" OFFSET {}".format(self._offset) if self._offset else '',
         )
@@ -57,6 +58,7 @@ class BaseQuerySet():
             - shipping_to = 'USA' or 'WORDWIDE' (multifield)
         """
         new_qs._filter.append(Q(*args, **kwargs))
+        return new_qs
 
     @copy_self
     def search(new_qs, *args, **kwargs):
