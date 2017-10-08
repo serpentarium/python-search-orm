@@ -9,6 +9,19 @@ class FieldMeta(type):
     '''TODO: check if metaclass is required'''
 
 
+class SettingDescriptor:
+
+    def __get__(self, instance, cls):
+        ""
+
+    def __set__(self, instance, value):
+        ""
+        instance._settings[self.name] = self.validate(value)
+
+    def validate(self, value):
+        return value
+
+
 class FieldType():
     # integer, long, float, double, date
     """Field type creation shortcut"""
