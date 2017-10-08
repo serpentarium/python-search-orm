@@ -107,14 +107,14 @@ class QComparisonMixin():
     @log_this
     def __eq__(self, value):
         # Allow comparing of non-field Q values
-        if self.qtype != self.FIELD:
+        if getattr(self, "qtype", BaseQ.FIELD) != BaseQ.FIELD:
             return tuple(self) == value
         return self._make_op(Condition.EQ, value)
 
     @log_this
     def __ne__(self, value):
         # Allow comparing of non-field Q values
-        if self.qtype != self.FIELD:
+        if getattr(self, "qtype", BaseQ.FIELD) != BaseQ.FIELD:
             return tuple(self) != value
         return -self._make_op(Condition.EQ, value)
 
