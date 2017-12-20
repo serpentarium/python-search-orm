@@ -28,42 +28,33 @@ class Range(namedtuple('Range', ['fr', 'to', 'fr_incl', 'to_incl'])):
             return v1 if v1[0] else v2
 
     def merge(self, other, operator):
-        if operator is Operator.OR:
-            return self.__or__(other)
-        else:
-            return self.__and__(other)
+        if not self._check_overlap(other):
+            raise ValueError("Can not merge non overlapped ranges")
+
+        if operator == Operator.OR:  # Outer range
+            left = min
+            right = max
+        else:                        # Inner range
+            left = max
+            right = min
+
+        # mirrored incl to use in MIN/MAX functions
+        fr, fr_incl = self._merge(
+            left, (self.fr, not self.fr_incl), (other.fr, not other.fr_incl))
+        fr_incl = not fr_incl
+
+        to, to_incl = self._merge(
+            right, (self.to, self.to_incl), (other.to, other.to_incl))
+        print(self, other)
+        return Range(fr, to, fr_incl, to_incl)
 
     def __and__(self, other):
-        """
-        Merge range with AND operator
-        """
-        if not self._check_overlap(other):
-            raise ValueError("Can not merge non overlapped ranges")
-
-        fr, fr_incl = self._merge(
-            max, (self.fr, not self.fr_incl), (other.fr, not other.fr_incl))
-        fr_incl = not fr_incl
-
-        to, to_incl = self._merge(
-            min, (self.to, self.to_incl), (other.to, other.to_incl))
-
-        return Range(fr, to, fr_incl, to_incl)
+        """ Intersection """
+        return self.merge(other, Operator.AND)
 
     def __or__(self, other):
-        """
-        Merge range with AND operator
-        """
-        if not self._check_overlap(other):
-            raise ValueError("Can not merge non overlapped ranges")
-
-        fr, fr_incl = self._merge(
-            min, (self.fr, not self.fr_incl), (other.fr, not other.fr_incl))
-        fr_incl = not fr_incl
-
-        to, to_incl = self._merge(
-            max, (self.to, self.to_incl), (other.to, other.to_incl))
-
-        return Range(fr, to, fr_incl, to_incl)
+        """ Union """
+        return self.merge(other, Operator.OR)
 
     @classmethod
     def from_range(cls, r):
